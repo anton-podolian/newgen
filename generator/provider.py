@@ -28,7 +28,7 @@ class HuggingFaceImageGenerator(ImageGenerator):
             endpoint = endpoint.format(model=quote(self.model, safe="/"))
         self.endpoint = endpoint
         self.client = httpx.Client(
-            headers={"Authorization": f"Bearer {api_key.strip()}", "Accept": "image/*"},
+            headers={"Authorization": f"Bearer {api_key.strip()}", "Accept": "image/png"},
             timeout=httpx.Timeout(timeout, connect=15.0),
             follow_redirects=True,
         )
