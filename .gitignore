@@ -1,0 +1,78 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Codex / agent state and caches
+.agents/
+.agent/
+.codex/
+.claude/
+.cursor/
+.aider*
+AGENT_CACHE/
+agent-cache/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging and build output
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Gradio and application runtime files
+.gradio/
+gradio_cached_examples/
+flagged/
+outputs/
+tmp/
+temp/
+*.log
+*.pid
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local tooling
+.tox/
+.nox/
+.cache/
