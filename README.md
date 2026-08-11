@@ -70,12 +70,27 @@ Edit `.env` and set `IMAGE_API_KEY`. Open `http://localhost:7860`. Never commit 
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `IMAGE_API_KEY` | Hugging Face token (required) | empty |
+| `HF_TOKEN` | Hugging Face token with Inference Providers permission | empty |
 | `IMAGE_MODEL` | Hub model ID | `stabilityai/stable-diffusion-xl-base-1.0` |
-| `IMAGE_API_URL` | Endpoint template; `{model}` is substituted | HF routed inference URL |
+| `IMAGE_API_URL` | Provider route template; `{model}` is substituted | fal-ai Router URL |
+| `LORA_WEIGHT_NAME` | Private LoRA filename if the repository has several | empty |
 | `IMAGE_API_TIMEOUT` | Request timeout in seconds | `120` |
 | `GRADIO_CONCURRENCY` | Simultaneous generation jobs | `1` |
 | `PORT` | Listening port | `7860` |
+
+### SDXL with a private LoRA through Inference Providers
+
+The app uses the `fal-ai` serverless provider through the Hugging Face Router. The current live SDXL mapping is `fal-ai/fast-sdxl`. For each generation, Railway uses `HF_TOKEN` to read the private repository metadata and gets a short-lived signed URL for the selected `.safetensors` file. It then sends fal's native SDXL payload through the Hugging Face route:
+
+```json
+{
+  "prompt": "...",
+  "image_size": {"width": 832, "height": 1216},
+  "loras": [{"path": "https://signed-hub-download-url/...safetensors", "scale": 0.8}]
+}
+```
+
+The actual HTTP endpoint is `https://router.huggingface.co/fal-ai/models/stabilityai/stable-diffusion-xl-base-1.0`; the base model identifies the route rather than appearing in the HTTP JSON body. Railway never downloads SDXL or the LoRA: fal downloads the signed LoRA URL and runs SDXL on its serverless GPU. Use the **Myanime LoRA** controls to enable the adapter and set its strength.
 
 Run checks with `python -m pytest -q` after installing `pytest`, or use `python -m compileall app.py generator safety utils` for a dependency-free syntax check.
 
@@ -83,7 +98,7 @@ Run checks with `python -m pytest -q` after installing `pytest`, or use `python 
 
 1. Push this directory to a private or public GitHub repository.
 2. In Railway choose **New Project → Deploy from GitHub repo** and select it.
-3. Under **Variables**, add `IMAGE_API_KEY` and, if needed, `IMAGE_MODEL`. Do not set `PORT`; Railway injects it.
+3. Under **Variables**, add `HF_TOKEN` (with **Inference Providers** and **Read** scopes) and, if needed, `LORA_WEIGHT_NAME`. Do not set `PORT`; Railway injects it.
 4. Railway detects `railway.json`, builds `Dockerfile`, runs `python app.py`, and checks `/`.
 5. In **Settings → Networking**, generate a public domain.
 6. Check deployment logs for the Gradio listening address, then make one generation request.

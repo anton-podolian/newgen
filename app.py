@@ -17,7 +17,8 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
-DEFAULT_API_URL = "https://router.huggingface.co/hf-inference/models/{model}"
+DEFAULT_API_URL = "https://router.huggingface.co/fal-ai/models/{model}"
+DEFAULT_LORA_REPOSITORY = "serenitymea/Myanime_model"
 
 MIN_DIMENSION = 512
 MAX_DIMENSION = 1536
@@ -39,7 +40,7 @@ ALLOWED_DIMENSIONS = range(MIN_DIMENSION, MAX_DIMENSION + 1, DIMENSION_STEP)
 @lru_cache(maxsize=1)
 def get_generator() -> HuggingFaceImageGenerator:
     return HuggingFaceImageGenerator(
-        api_key=os.getenv("IMAGE_API_KEY", ""),
+        api_key=os.getenv("HF_TOKEN", os.getenv("IMAGE_API_KEY", "")),
         model=os.getenv("IMAGE_MODEL", DEFAULT_MODEL),
         base_url=os.getenv("IMAGE_API_URL", DEFAULT_API_URL),
         timeout=float(os.getenv("IMAGE_API_TIMEOUT", "120")),
@@ -73,6 +74,8 @@ def generate_images(
     image_count: int,
     style: str,
     add_quality_tags: bool,
+    use_lora: bool,
+    lora_strength: float,
 ) -> tuple[list[tuple[Image.Image, str]], str]:
     prompt = prompt.strip()
     if not prompt:
@@ -93,7 +96,16 @@ def generate_images(
         for index in range(image_count):
             requested_seed = None if random_seed or seed < 0 else seed + index
             generated_image = generator.generate(
-                final_prompt, negative_prompt.strip(), width, height, steps, float(guidance), requested_seed
+                prompt=final_prompt,
+                negative_prompt=negative_prompt.strip(),
+                width=width,
+                height=height,
+                steps=steps,
+                guidance_scale=float(guidance),
+                seed=requested_seed,
+                lora_repository=DEFAULT_LORA_REPOSITORY if use_lora else None,
+                lora_weight_name=os.getenv("LORA_WEIGHT_NAME", "") or None,
+                lora_scale=float(lora_strength),
             )
             images.append((generated_image.image, f"Seed {generated_image.seed}"))
             seeds.append(generated_image.seed)
@@ -151,6 +163,9 @@ def build_ui() -> gr.Blocks:
                         label="Style",
                     )
                     quality = gr.Checkbox(value=True, label="Quality enhancer")
+                with gr.Row():
+                    use_lora = gr.Checkbox(value=True, label="Use Myanime LoRA")
+                    lora_strength = gr.Slider(0, 2, 0.8, step=0.05, label="LoRA strength")
             with gr.Row():
                 aspect = gr.Radio(list(ASPECT_SIZES), value="Portrait", label="Aspect ratio")
                 width = gr.Slider(
@@ -173,7 +188,21 @@ def build_ui() -> gr.Blocks:
         aspect.change(set_aspect_size, aspect, [width, height], queue=False)
         button.click(
             generate_images,
-            [prompt, negative, width, height, steps, guidance, seed, random_seed, count, style, quality],
+            [
+                prompt,
+                negative,
+                width,
+                height,
+                steps,
+                guidance,
+                seed,
+                random_seed,
+                count,
+                style,
+                quality,
+                use_lora,
+                lora_strength,
+            ],
             [gallery, status],
         )
     return demo
