@@ -5,7 +5,7 @@ import logging
 import random
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 import httpx
 from PIL import Image, UnidentifiedImageError
@@ -67,7 +67,7 @@ class HuggingFaceImageGenerator:
         }
         if lora_repository:
             payload["loras"] = [{
-                "path": self._private_lora_url(lora_repository, lora_weight_name),
+                "path": self._public_lora_url(lora_repository, lora_weight_name),
                 "scale": lora_scale,
             }]
         try:
@@ -112,42 +112,35 @@ class HuggingFaceImageGenerator:
         except ValueError:
             return response.text[:500]
 
-    def _private_lora_url(self, repository: str, weight_name: str | None) -> str:
-        """Create a temporary download URL that the serverless provider can fetch."""
+    def _public_lora_url(self, repository: str, weight_name: str | None) -> str:
+        """Resolve the public Hub LoRA file without downloading its weights."""
         files_url = f"https://huggingface.co/api/models/{quote(repository, safe='/')}/tree/main?recursive=true"
         try:
             response = self.client.get(files_url)
             response.raise_for_status()
             files = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise ProviderError("Could not read the private LoRA repository.") from exc
+            raise ProviderError("Could not read the public LoRA repository.") from exc
 
         if not isinstance(files, list):
-            raise ProviderError("The private LoRA repository returned an invalid file list.")
+            raise ProviderError("The LoRA repository returned an invalid file list.")
         checkpoints = [file["path"] for file in files if file.get("path", "").endswith(".safetensors")]
         if weight_name:
             if weight_name not in checkpoints:
-                raise ProviderError("LORA_WEIGHT_NAME was not found in the private LoRA repository.")
+                raise ProviderError("LORA_WEIGHT_NAME was not found in the LoRA repository.")
         elif len(checkpoints) == 1:
             weight_name = checkpoints[0]
         elif not checkpoints:
-            raise ProviderError("No .safetensors file was found in the private LoRA repository.")
+            raise ProviderError("No .safetensors file was found in the LoRA repository.")
         else:
             raise ProviderError("The LoRA repository has multiple .safetensors files. Set LORA_WEIGHT_NAME.")
 
-        download_url = (
+        # The public adapter's live Hub mapping tells fal to use this exact
+        # weight; neither Railway nor the application downloads it.
+        return (
             f"https://huggingface.co/{quote(repository, safe='/')}/resolve/main/"
             f"{quote(weight_name, safe='/')}"
         )
-        try:
-            response = self.client.request("HEAD", download_url, follow_redirects=False)
-        except httpx.HTTPError as exc:
-            raise ProviderError("Could not prepare the private LoRA for generation.") from exc
-
-        location = response.headers.get("location")
-        if response.is_redirect and location:
-            return urljoin(download_url, location)
-        raise ProviderError("Hugging Face did not provide a temporary download URL for the private LoRA.")
 
     def close(self) -> None:
         self.client.close()

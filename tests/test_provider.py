@@ -18,7 +18,7 @@ def test_fal_router_payload_contains_signed_lora_and_scale(monkeypatch) -> None:
         model="stabilityai/stable-diffusion-xl-base-1.0",
         base_url="https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl",
     )
-    monkeypatch.setattr(generator, "_private_lora_url", lambda *_: "https://signed.example/lora.safetensors")
+    monkeypatch.setattr(generator, "_public_lora_url", lambda *_: "https://huggingface.co/example/lora.safetensors")
     seen_payload = {}
 
     def router_handler(request: httpx.Request) -> httpx.Response:
@@ -46,4 +46,4 @@ def test_fal_router_payload_contains_signed_lora_and_scale(monkeypatch) -> None:
     assert result.seed == 123
     assert result.image.size == (1, 1)
     assert seen_payload["image_size"] == {"width": 832, "height": 1216}
-    assert seen_payload["loras"] == [{"path": "https://signed.example/lora.safetensors", "scale": 0.8}]
+    assert seen_payload["loras"] == [{"path": "https://huggingface.co/example/lora.safetensors", "scale": 0.8}]
