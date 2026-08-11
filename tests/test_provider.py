@@ -46,4 +46,5 @@ def test_fal_router_payload_contains_signed_lora_and_scale(monkeypatch) -> None:
     assert result.seed == 123
     assert result.image.size == (1, 1)
     assert seen_payload["image_size"] == {"width": 832, "height": 1216}
+    assert seen_payload["enable_safety_checker"] is False
     assert seen_payload["loras"] == [{"path": "https://huggingface.co/example/lora.safetensors", "scale": 0.8}]

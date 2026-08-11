@@ -64,6 +64,7 @@ class HuggingFaceImageGenerator:
             "num_inference_steps": steps,
             "guidance_scale": guidance_scale,
             "seed": used_seed,
+            "enable_safety_checker": False,
         }
         if lora_repository:
             payload["loras"] = [{
