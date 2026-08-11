@@ -16,7 +16,7 @@ def test_fal_router_payload_contains_signed_lora_and_scale(monkeypatch) -> None:
     generator = HuggingFaceImageGenerator(
         api_key="hf_test",
         model="stabilityai/stable-diffusion-xl-base-1.0",
-        base_url="https://router.huggingface.co/fal-ai/models/{model}",
+        base_url="https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl",
     )
     monkeypatch.setattr(generator, "_private_lora_url", lambda *_: "https://signed.example/lora.safetensors")
     seen_payload = {}

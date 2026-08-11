@@ -72,7 +72,7 @@ Edit `.env` and set `IMAGE_API_KEY`. Open `http://localhost:7860`. Never commit 
 |---|---|---|
 | `HF_TOKEN` | Hugging Face token with Inference Providers permission | empty |
 | `IMAGE_MODEL` | Hub model ID | `stabilityai/stable-diffusion-xl-base-1.0` |
-| `IMAGE_API_URL` | Provider route template; `{model}` is substituted | fal-ai Router URL |
+| `IMAGE_API_URL` | fal provider route | `https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl` |
 | `LORA_WEIGHT_NAME` | Private LoRA filename if the repository has several | empty |
 | `IMAGE_API_TIMEOUT` | Request timeout in seconds | `120` |
 | `GRADIO_CONCURRENCY` | Simultaneous generation jobs | `1` |
@@ -90,7 +90,7 @@ The app uses the `fal-ai` serverless provider through the Hugging Face Router. T
 }
 ```
 
-The actual HTTP endpoint is `https://router.huggingface.co/fal-ai/models/stabilityai/stable-diffusion-xl-base-1.0`; the base model identifies the route rather than appearing in the HTTP JSON body. Railway never downloads SDXL or the LoRA: fal downloads the signed LoRA URL and runs SDXL on its serverless GPU. Use the **Myanime LoRA** controls to enable the adapter and set its strength.
+The actual HTTP endpoint is `https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl`. This is fal's provider ID from Hugging Face's live SDXL mapping; the Router does not accept `/fal-ai/models/<Hub model ID>`. Railway never downloads SDXL or the LoRA: fal downloads the signed LoRA URL and runs SDXL on its serverless GPU. Use the **Myanime LoRA** controls to enable the adapter and set its strength.
 
 Run checks with `python -m pytest -q` after installing `pytest`, or use `python -m compileall app.py generator safety utils` for a dependency-free syntax check.
 

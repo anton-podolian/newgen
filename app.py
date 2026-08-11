@@ -17,7 +17,9 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
-DEFAULT_API_URL = "https://router.huggingface.co/fal-ai/models/{model}"
+# This is the fal provider ID from the live Hub mapping for SDXL 1.0.
+# Hugging Face's fal router routes by provider ID, not by `/models/<Hub model>`.
+DEFAULT_API_URL = "https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl"
 DEFAULT_LORA_REPOSITORY = "serenitymea/Myanime_model"
 
 MIN_DIMENSION = 512
