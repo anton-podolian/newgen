@@ -12,21 +12,21 @@ def _png_bytes() -> bytes:
     return output.getvalue()
 
 
-def test_fal_router_payload_contains_signed_lora_and_scale(monkeypatch) -> None:
+def test_fal_router_payload_contains_lora_and_scale(monkeypatch) -> None:
     generator = HuggingFaceImageGenerator(
         api_key="hf_test",
         model="stabilityai/stable-diffusion-xl-base-1.0",
         base_url="https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl",
     )
-    monkeypatch.setattr(generator, "_public_lora_url", lambda *_: "https://huggingface.co/example/lora.safetensors")
+    monkeypatch.setattr(generator, "_lora_url", lambda *_: "https://huggingface.co/example/lora.safetensors")
     seen_payload = {}
 
     def router_handler(request: httpx.Request) -> httpx.Response:
         seen_payload.update(__import__("json").loads(request.content))
         return httpx.Response(200, json={"images": [{"url": "https://cdn.example/generated.png"}]})
 
-    generator.client = httpx.Client(transport=httpx.MockTransport(router_handler))
-    generator.download_client = httpx.Client(
+    generator.router = httpx.Client(transport=httpx.MockTransport(router_handler))
+    generator.images = httpx.Client(
         transport=httpx.MockTransport(lambda _: httpx.Response(200, content=_png_bytes()))
     )
 

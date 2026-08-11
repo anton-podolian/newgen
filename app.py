@@ -21,6 +21,7 @@ DEFAULT_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 # Hugging Face's fal router routes by provider ID, not by `/models/<Hub model>`.
 DEFAULT_API_URL = "https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl"
 DEFAULT_LORA_REPOSITORY = "serenitymea/Myanime_model"
+DEFAULT_LORA_WEIGHT_NAME = "Anime.safetensors"
 
 MIN_DIMENSION = 512
 MAX_DIMENSION = 1536
@@ -42,7 +43,7 @@ ALLOWED_DIMENSIONS = range(MIN_DIMENSION, MAX_DIMENSION + 1, DIMENSION_STEP)
 @lru_cache(maxsize=1)
 def get_generator() -> HuggingFaceImageGenerator:
     return HuggingFaceImageGenerator(
-        api_key=os.getenv("HF_TOKEN", os.getenv("IMAGE_API_KEY", "")),
+        api_key=os.getenv("HF_TOKEN", ""),
         model=os.getenv("IMAGE_MODEL", DEFAULT_MODEL),
         base_url=os.getenv("IMAGE_API_URL", DEFAULT_API_URL),
         timeout=float(os.getenv("IMAGE_API_TIMEOUT", "120")),
@@ -62,6 +63,15 @@ def set_aspect_size(aspect: str) -> tuple[gr.Slider, gr.Slider]:
     if size is None:
         return gr.Slider(interactive=True), gr.Slider(interactive=True)
     return gr.Slider(value=size[0], interactive=False), gr.Slider(value=size[1], interactive=False)
+
+
+def validate_generation(width: int, height: int, steps: int, image_count: int) -> None:
+    if width not in ALLOWED_DIMENSIONS or height not in ALLOWED_DIMENSIONS:
+        raise gr.Error("Width and height must be 512 to 1536 pixels in steps of 64.")
+    if not MIN_STEPS <= steps <= MAX_STEPS:
+        raise gr.Error("Steps must be between 10 and 50.")
+    if not MIN_IMAGES <= image_count <= MAX_IMAGES:
+        raise gr.Error("Choose between 1 and 4 images.")
 
 
 def generate_images(
@@ -85,10 +95,7 @@ def generate_images(
 
     width, height = int(width), int(height)
     steps, image_count, seed = int(steps), int(image_count), int(seed)
-    if width not in ALLOWED_DIMENSIONS or height not in ALLOWED_DIMENSIONS:
-        raise gr.Error("Width and height must be 512 to 1536 pixels in steps of 64.")
-    if not MIN_IMAGES <= image_count <= MAX_IMAGES or not MIN_STEPS <= steps <= MAX_STEPS:
-        raise gr.Error("Invalid image count or step count.")
+    validate_generation(width, height, steps, image_count)
 
     final_prompt = enhance_prompt(prompt, style, add_quality_tags)
     images: list[tuple[Image.Image, str]] = []
@@ -96,21 +103,21 @@ def generate_images(
     try:
         generator = get_generator()
         for index in range(image_count):
-            requested_seed = None if random_seed or seed < 0 else seed + index
-            generated_image = generator.generate(
+            image_seed = None if random_seed or seed < 0 else seed + index
+            generated = generator.generate(
                 prompt=final_prompt,
                 negative_prompt=negative_prompt.strip(),
                 width=width,
                 height=height,
                 steps=steps,
                 guidance_scale=float(guidance),
-                seed=requested_seed,
+                seed=image_seed,
                 lora_repository=DEFAULT_LORA_REPOSITORY if use_lora else None,
-                lora_weight_name=os.getenv("LORA_WEIGHT_NAME", "") or None,
+                lora_weight_name=os.getenv("LORA_WEIGHT_NAME") or DEFAULT_LORA_WEIGHT_NAME,
                 lora_scale=float(lora_strength),
             )
-            images.append((generated_image.image, f"Seed {generated_image.seed}"))
-            seeds.append(generated_image.seed)
+            images.append((generated.image, f"Seed {generated.seed}"))
+            seeds.append(generated.seed)
     except (ProviderError, ValueError) as exc:
         logger.exception("Generation failed")
         raise gr.Error(str(exc)) from exc
