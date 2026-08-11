@@ -7,6 +7,7 @@ from functools import lru_cache
 
 import gradio as gr
 from dotenv import load_dotenv
+from PIL import Image
 
 from generator import HuggingFaceImageGenerator, ProviderError
 from utils import DEFAULT_NEGATIVE_PROMPT, enhance_prompt
@@ -15,16 +16,32 @@ load_dotenv()
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-ASPECTS = {"Portrait": (832, 1216), "Square": (1024, 1024), "Landscape": (1216, 832), "Custom": None}
-ALLOWED_DIMENSIONS = range(512, 1537, 64)
+DEFAULT_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
+DEFAULT_API_URL = "https://router.huggingface.co/hf-inference/models/{model}"
+
+MIN_DIMENSION = 512
+MAX_DIMENSION = 1536
+DIMENSION_STEP = 64
+MIN_STEPS = 10
+MAX_STEPS = 50
+MIN_IMAGES = 1
+MAX_IMAGES = 4
+
+ASPECT_SIZES = {
+    "Portrait": (832, 1216),
+    "Square": (1024, 1024),
+    "Landscape": (1216, 832),
+    "Custom": None,
+}
+ALLOWED_DIMENSIONS = range(MIN_DIMENSION, MAX_DIMENSION + 1, DIMENSION_STEP)
 
 
 @lru_cache(maxsize=1)
 def get_generator() -> HuggingFaceImageGenerator:
     return HuggingFaceImageGenerator(
         api_key=os.getenv("IMAGE_API_KEY", ""),
-        model=os.getenv("IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0"),
-        base_url=os.getenv("IMAGE_API_URL", "https://router.huggingface.co/hf-inference/models/{model}"),
+        model=os.getenv("IMAGE_MODEL", DEFAULT_MODEL),
+        base_url=os.getenv("IMAGE_API_URL", DEFAULT_API_URL),
         timeout=float(os.getenv("IMAGE_API_TIMEOUT", "120")),
     )
 
@@ -37,34 +54,49 @@ def close_generator() -> None:
 atexit.register(close_generator)
 
 
-def set_aspect(aspect: str) -> tuple[gr.Slider, gr.Slider]:
-    size = ASPECTS.get(aspect)
+def set_aspect_size(aspect: str) -> tuple[gr.Slider, gr.Slider]:
+    size = ASPECT_SIZES.get(aspect)
     if size is None:
         return gr.Slider(interactive=True), gr.Slider(interactive=True)
     return gr.Slider(value=size[0], interactive=False), gr.Slider(value=size[1], interactive=False)
 
 
-def generate_images(prompt: str, negative_prompt: str, width: int, height: int, steps: int,
-                    guidance: float, seed: int, random_seed: bool, count: int, style: str,
-                    quality: bool):
-    ok, reason = prompt
-    if not ok:
-        raise gr.Error(reason)
-    if int(width) not in ALLOWED_DIMENSIONS or int(height) not in ALLOWED_DIMENSIONS:
-        raise gr.Error("Width and height must be 512–1536 pixels in steps of 64.")
-    if not 1 <= int(count) <= 4 or not 10 <= int(steps) <= 50:
+def generate_images(
+    prompt: str,
+    negative_prompt: str,
+    width: int,
+    height: int,
+    steps: int,
+    guidance: float,
+    seed: int,
+    random_seed: bool,
+    image_count: int,
+    style: str,
+    add_quality_tags: bool,
+) -> tuple[list[tuple[Image.Image, str]], str]:
+    prompt = prompt.strip()
+    if not prompt:
+        raise gr.Error("Enter a prompt.")
+
+    width, height = int(width), int(height)
+    steps, image_count, seed = int(steps), int(image_count), int(seed)
+    if width not in ALLOWED_DIMENSIONS or height not in ALLOWED_DIMENSIONS:
+        raise gr.Error("Width and height must be 512 to 1536 pixels in steps of 64.")
+    if not MIN_IMAGES <= image_count <= MAX_IMAGES or not MIN_STEPS <= steps <= MAX_STEPS:
         raise gr.Error("Invalid image count or step count.")
 
-    final_prompt = enhance_prompt(prompt, style, quality)
-    images, seeds = [], []
+    final_prompt = enhance_prompt(prompt, style, add_quality_tags)
+    images: list[tuple[Image.Image, str]] = []
+    seeds: list[int] = []
     try:
-        provider = get_generator()
-        for index in range(int(count)):
-            requested_seed = None if random_seed or int(seed) < 0 else int(seed) + index
-            result = provider.generate(final_prompt, negative_prompt.strip(), int(width), int(height),
-                                       int(steps), float(guidance), requested_seed)
-            images.append((result.image, f"Seed {result.seed}"))
-            seeds.append(result.seed)
+        generator = get_generator()
+        for index in range(image_count):
+            requested_seed = None if random_seed or seed < 0 else seed + index
+            generated_image = generator.generate(
+                final_prompt, negative_prompt.strip(), width, height, steps, float(guidance), requested_seed
+            )
+            images.append((generated_image.image, f"Seed {generated_image.seed}"))
+            seeds.append(generated_image.seed)
     except (ProviderError, ValueError) as exc:
         logger.exception("Generation failed")
         raise gr.Error(str(exc)) from exc
@@ -72,15 +104,36 @@ def generate_images(prompt: str, negative_prompt: str, width: int, height: int, 
         logger.exception("Unexpected generation failure")
         raise gr.Error("Unexpected generation error. Please try again.") from exc
 
-    details = (f"**Generated {len(images)} image(s)**  \n**Seeds:** {', '.join(map(str, seeds))}  \n"
-               f"**Parameters:** {int(width)}×{int(height)}, {int(steps)} steps, CFG {float(guidance):g}  \n"
-               f"**Final prompt:** {final_prompt}")
-    return images, details
+    return images, generation_details(image_count, seeds, width, height, steps, guidance, final_prompt)
+
+
+def generation_details(
+    image_count: int,
+    seeds: list[int],
+    width: int,
+    height: int,
+    steps: int,
+    guidance: float,
+    prompt: str,
+) -> str:
+    return (
+        f"**Generated {image_count} image(s)**  \n"
+        f"**Seeds:** {', '.join(map(str, seeds))}  \n"
+        f"**Parameters:** {width} x {height}, {steps} steps, CFG {guidance:g}  \n"
+        f"**Final prompt:** {prompt}"
+    )
 
 
 CSS = """
-.container {max-width: 1120px !important; margin: auto;} .generate {min-height: 52px; font-size: 1.08rem;}
-.notice {border-left: 3px solid #7c3aed; padding-left: 12px; color: var(--body-text-color-subdued);}
+.container {
+    max-width: 1120px !important;
+    margin: auto;
+}
+
+.generate {
+    min-height: 52px;
+    font-size: 1.08rem;
+}
 """
 
 
@@ -92,16 +145,24 @@ def build_ui() -> gr.Blocks:
             negative = gr.Textbox(label="Negative prompt", value=DEFAULT_NEGATIVE_PROMPT, lines=2)
             with gr.Accordion("Advanced prompt settings", open=False):
                 with gr.Row():
-                    style = gr.Dropdown(list(("Anime", "Detailed anime", "Cinematic anime", "Illustration", "Manga-inspired")), value="Detailed anime", label="Style")
+                    style = gr.Dropdown(
+                        ["Anime", "Detailed anime", "Cinematic anime", "Illustration", "Manga-inspired"],
+                        value="Detailed anime",
+                        label="Style",
+                    )
                     quality = gr.Checkbox(value=True, label="Quality enhancer")
             with gr.Row():
-                aspect = gr.Radio(list(ASPECTS), value="Portrait", label="Aspect ratio")
-                width = gr.Slider(512, 1536, 832, step=64, label="Width", interactive=False)
-                height = gr.Slider(512, 1536, 1216, step=64, label="Height", interactive=False)
+                aspect = gr.Radio(list(ASPECT_SIZES), value="Portrait", label="Aspect ratio")
+                width = gr.Slider(
+                    MIN_DIMENSION, MAX_DIMENSION, 832, step=DIMENSION_STEP, label="Width", interactive=False
+                )
+                height = gr.Slider(
+                    MIN_DIMENSION, MAX_DIMENSION, 1216, step=DIMENSION_STEP, label="Height", interactive=False
+                )
             with gr.Row():
-                steps = gr.Slider(10, 50, 28, step=1, label="Steps")
+                steps = gr.Slider(MIN_STEPS, MAX_STEPS, 28, step=1, label="Steps")
                 guidance = gr.Slider(1, 15, 7, step=0.5, label="CFG / guidance")
-                count = gr.Slider(1, 4, 1, step=1, label="Images")
+                count = gr.Slider(MIN_IMAGES, MAX_IMAGES, 1, step=1, label="Images")
             with gr.Row():
                 seed = gr.Number(value=-1, precision=0, label="Seed (-1 = random)")
                 random_seed = gr.Checkbox(value=True, label="Random seed")
@@ -109,9 +170,12 @@ def build_ui() -> gr.Blocks:
             gallery = gr.Gallery(label="Generated images", columns=2, object_fit="contain", height="auto")
             status = gr.Markdown("Ready.")
 
-        aspect.change(set_aspect, aspect, [width, height], queue=False)
-        button.click(generate_images, [prompt, negative, width, height, steps, guidance, seed,
-                                      random_seed, count, style, quality], [gallery, status])
+        aspect.change(set_aspect_size, aspect, [width, height], queue=False)
+        button.click(
+            generate_images,
+            [prompt, negative, width, height, steps, guidance, seed, random_seed, count, style, quality],
+            [gallery, status],
+        )
     return demo
 
 

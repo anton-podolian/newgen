@@ -3,18 +3,27 @@ from __future__ import annotations
 import io
 import logging
 import random
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 from PIL import Image, UnidentifiedImageError
 
-from .base import GeneratedImage, ImageGenerator, ProviderError
-
 logger = logging.getLogger(__name__)
 
 
-class HuggingFaceImageGenerator(ImageGenerator):
+@dataclass(frozen=True)
+class GeneratedImage:
+    image: Image.Image
+    seed: int
+
+
+class ProviderError(RuntimeError):
+    """An error that is safe to show to an app user."""
+
+
+class HuggingFaceImageGenerator:
     """Text-to-image through Hugging Face's routed hf-inference HTTP API."""
 
     def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 120.0) -> None:
@@ -36,14 +45,16 @@ class HuggingFaceImageGenerator(ImageGenerator):
     def generate(self, prompt: str, negative_prompt: str, width: int, height: int,
                  steps: int, guidance_scale: float, seed: int | None) -> GeneratedImage:
         used_seed = seed if seed is not None else random.SystemRandom().randint(0, 2**31 - 1)
-        payload: dict[str, Any] = {
-            "inputs": prompt,
-            "parameters": {"negative_prompt": negative_prompt, "width": width, "height": height,
-                           "num_inference_steps": steps, "guidance_scale": guidance_scale,
-                           "seed": used_seed},
+        parameters: dict[str, Any] = {
+            "negative_prompt": negative_prompt,
+            "width": width,
+            "height": height,
+            "num_inference_steps": steps,
+            "guidance_scale": guidance_scale,
+            "seed": used_seed,
         }
         try:
-            response = self.client.post(self.endpoint, json=payload)
+            response = self.client.post(self.endpoint, json={"inputs": prompt, "parameters": parameters})
         except httpx.TimeoutException as exc:
             raise ProviderError("The image service timed out. Please try again.") from exc
         except httpx.HTTPError as exc:

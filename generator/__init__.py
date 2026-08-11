@@ -1,4 +1,3 @@
-from .base import GeneratedImage, ImageGenerator, ProviderError
-from .provider import HuggingFaceImageGenerator
+from .provider import GeneratedImage, HuggingFaceImageGenerator, ProviderError
 
-__all__ = ["GeneratedImage", "ImageGenerator", "ProviderError", "HuggingFaceImageGenerator"]
+__all__ = ["GeneratedImage", "HuggingFaceImageGenerator", "ProviderError"]
