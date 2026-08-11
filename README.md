@@ -22,12 +22,10 @@ Running a diffusion model inside a normal Railway container is impractical: mode
 │   └── provider.py
 ├── safety/
 │   ├── __init__.py
-│   └── moderation.py
 ├── utils/
 │   ├── __init__.py
 │   └── prompts.py
 ├── tests/
-│   ├── test_moderation.py
 │   └── test_prompts.py
 ├── .env.example
 ├── .gitignore

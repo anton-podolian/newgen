@@ -9,7 +9,6 @@ import gradio as gr
 from dotenv import load_dotenv
 
 from generator import HuggingFaceImageGenerator, ProviderError
-from safety import validate_prompt
 from utils import DEFAULT_NEGATIVE_PROMPT, enhance_prompt
 
 load_dotenv()
@@ -47,10 +46,8 @@ def set_aspect(aspect: str) -> tuple[gr.Slider, gr.Slider]:
 
 def generate_images(prompt: str, negative_prompt: str, width: int, height: int, steps: int,
                     guidance: float, seed: int, random_seed: bool, count: int, style: str,
-                    quality: bool, adult_confirmed: bool):
-    if not adult_confirmed:
-        raise gr.Error("You must confirm that you are 18+ and all depicted characters are fictional adults.")
-    ok, reason = validate_prompt(prompt)
+                    quality: bool):
+    ok, reason = prompt
     if not ok:
         raise gr.Error(reason)
     if int(width) not in ALLOWED_DIMENSIONS or int(height) not in ALLOWED_DIMENSIONS:
@@ -91,7 +88,6 @@ def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Anime Image Generator", css=CSS) as demo:
         with gr.Column(elem_classes="container"):
             gr.Markdown("# Anime Image Generator\nCreate anime-style artwork with remote GPU inference.")
-            gr.Markdown("Adults only. Sexual content may depict only fictional, unambiguously adult characters.", elem_classes="notice")
             prompt = gr.Textbox(label="Prompt", placeholder="Describe the image...", lines=5, max_lines=10)
             negative = gr.Textbox(label="Negative prompt", value=DEFAULT_NEGATIVE_PROMPT, lines=2)
             with gr.Accordion("Advanced prompt settings", open=False):
@@ -109,14 +105,13 @@ def build_ui() -> gr.Blocks:
             with gr.Row():
                 seed = gr.Number(value=-1, precision=0, label="Seed (-1 = random)")
                 random_seed = gr.Checkbox(value=True, label="Random seed")
-            confirmed = gr.Checkbox(label="I confirm that I am 18+ and that all depicted characters are fictional adults aged 18 or older.")
             button = gr.Button("Generate", variant="primary", elem_classes="generate")
             gallery = gr.Gallery(label="Generated images", columns=2, object_fit="contain", height="auto")
             status = gr.Markdown("Ready.")
 
         aspect.change(set_aspect, aspect, [width, height], queue=False)
         button.click(generate_images, [prompt, negative, width, height, steps, guidance, seed,
-                                      random_seed, count, style, quality, confirmed], [gallery, status])
+                                      random_seed, count, style, quality], [gallery, status])
     return demo
 
 
